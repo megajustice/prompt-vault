@@ -469,7 +469,9 @@ html, body {
 .badge-openai { background: #10a37f1a; color: #3fb950; border: 1px solid #10a37f33; }
 .badge-anthropic { background: #d4a2741a; color: #d4a274; border: 1px solid #d4a27433; }
 
-.badge:not(.badge-openai):not(.badge-anthropic) {
+.badge-lmstudio { background: #f97316aa; color: #fed7aa; border: 1px solid #f9731633; }
+
+.badge:not(.badge-openai):not(.badge-anthropic):not(.badge-lmstudio) {
     background: var(--accent-dim);
     color: var(--text);
 }
@@ -565,6 +567,102 @@ html, body {
 .markdown-body hr { border: none; border-top: 1px solid var(--border); margin: 1.25em 0; }
 .markdown-body strong { font-weight: 600; }
 .markdown-body em { font-style: italic; }
+
+/* ── Model selector row ── */
+.model-selector {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+}
+
+.btn-xs {
+    padding: 0.25rem 0.55rem;
+    font-size: 0.72rem;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 5px;
+    color: var(--text-dim);
+    cursor: pointer;
+    transition: all 0.12s;
+    white-space: nowrap;
+}
+
+.btn-xs:hover { border-color: var(--accent); color: var(--accent); }
+.btn-xs:disabled { opacity: 0.45; cursor: not-allowed; }
+
+/* ── Favorite star ── */
+.fav-toggle {
+    font-size: 1.2rem;
+    color: var(--text-faint);
+    transition: all 0.15s;
+}
+
+.fav-toggle:hover { color: var(--yellow); }
+.fav-toggle.is-fav { color: var(--yellow); }
+
+/* ── Compare-after-run button ── */
+.btn-compare-after {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    color: var(--text-dim);
+    cursor: pointer;
+    padding: 0.2rem 0.55rem;
+    font-size: 0.72rem;
+    border-radius: 5px;
+    transition: all 0.12s;
+    white-space: nowrap;
+}
+
+.btn-compare-after:hover { border-color: var(--accent); color: var(--accent); }
+
+.response-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+    margin-left: auto;
+}
+
+/* ── Compare original label ── */
+.compare-original {
+    padding: 0.6rem 0.85rem;
+    border-bottom: 1px solid var(--border);
+    font-size: 0.78rem;
+    color: var(--text-dim);
+}
+
+.compare-original-label {
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--text-faint);
+    margin-bottom: 0.3rem;
+}
+
+/* ── LM Studio badge (small) ── */
+.badge-sm.badge-lmstudio { background: #f97316aa; color: #fed7aa; }
+
+/* ── Toast notification ── */
+.toast {
+    position: fixed;
+    bottom: 1.5rem;
+    left: 50%;
+    transform: translateX(-50%) translateY(20px);
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 0.55rem 1.25rem;
+    border-radius: 8px;
+    font-size: 0.82rem;
+    z-index: 100;
+    opacity: 0;
+    pointer-events: none;
+    transition: all 0.25s ease;
+}
+
+.toast.show {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+}
 
 /* ── Scrollbars ── */
 ::-webkit-scrollbar { width: 6px; }

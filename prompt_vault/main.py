@@ -5,6 +5,7 @@ from fastapi.staticfiles import StaticFiles
 
 from prompt_vault.database import create_db
 from prompt_vault.migrate import run_migrations
+from prompt_vault.providers.registry import refresh_lmstudio_models
 from prompt_vault.routes import api, gateway, openai_compat, ui
 
 logging.basicConfig(
@@ -13,7 +14,7 @@ logging.basicConfig(
     datefmt="%H:%M:%S",
 )
 
-app = FastAPI(title="Prompt Vault", version="0.2.0")
+app = FastAPI(title="Prompt Vault", version="0.3.0")
 
 app.mount("/static", StaticFiles(directory="prompt_vault/static"), name="static")
 app.include_router(api.router)
@@ -26,4 +27,5 @@ app.include_router(ui.router)
 def on_startup():
     run_migrations()
     create_db()
-    logging.getLogger("prompt_vault").info("Prompt Vault v0.2 started")
+    refresh_lmstudio_models()
+    logging.getLogger("prompt_vault").info("Prompt Vault v0.3 started")

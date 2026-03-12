@@ -21,6 +21,8 @@ from prompt_vault.services.prompt_service import (
     get_distinct_providers,
     get_distinct_models,
 )
+from prompt_vault.providers.base import KNOWN_MODELS
+from prompt_vault.providers.registry import refresh_lmstudio_models
 
 router = APIRouter(prefix="/api", tags=["api"])
 
@@ -83,4 +85,23 @@ def get_filters(session: Session = Depends(get_session)):
     return {
         "providers": get_distinct_providers(session),
         "models": get_distinct_models(session),
+    }
+
+
+@router.get("/models")
+def get_models():
+    """Return all known models, including auto-discovered LM Studio models."""
+    refresh_lmstudio_models()
+    return KNOWN_MODELS
+
+
+@router.post("/models/refresh")
+def refresh_models():
+    """Force re-discovery of LM Studio models."""
+    refresh_lmstudio_models()
+    lm_models = KNOWN_MODELS.get("lmstudio", [])
+    return {
+        "lmstudio_available": len(lm_models) > 0,
+        "lmstudio_models": lm_models,
+        "all_models": KNOWN_MODELS,
     }

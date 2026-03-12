@@ -1,16 +1,28 @@
 import logging
 from typing import Optional
 
-from prompt_vault.providers.base import BaseProvider, ProviderResult, validate_model
+from prompt_vault.providers.base import BaseProvider, ProviderResult, KNOWN_MODELS, validate_model
 from prompt_vault.providers.openai_provider import OpenAIProvider
 from prompt_vault.providers.anthropic_provider import AnthropicProvider
+from prompt_vault.providers.lmstudio_provider import LMStudioProvider, discover_models
 
 logger = logging.getLogger("prompt_vault.providers")
 
 _PROVIDERS = {
     "openai": OpenAIProvider(),
     "anthropic": AnthropicProvider(),
+    "lmstudio": LMStudioProvider(),
 }
+
+
+def refresh_lmstudio_models():
+    """Discover models from a running LM Studio instance and update KNOWN_MODELS."""
+    models = discover_models()
+    if models:
+        KNOWN_MODELS["lmstudio"] = models
+    elif "lmstudio" in KNOWN_MODELS:
+        # Keep stale list if discovery fails (server might be temporarily down)
+        pass
 
 
 class ProviderError(Exception):
