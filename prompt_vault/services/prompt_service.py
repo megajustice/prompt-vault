@@ -1,3 +1,5 @@
+from typing import Optional
+
 from sqlmodel import Session, select, col
 
 from prompt_vault.models import PromptLog, PromptLogCreate
@@ -25,7 +27,7 @@ def get_prompt_logs(
     return list(session.exec(statement).all())
 
 
-def get_prompt_log(session: Session, log_id: int) -> PromptLog | None:
+def get_prompt_log(session: Session, log_id: int) -> Optional[PromptLog]:
     return session.get(PromptLog, log_id)
 
 
