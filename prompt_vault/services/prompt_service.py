@@ -163,6 +163,37 @@ def get_token_totals(session: Session) -> dict:
     }
 
 
+def get_today_count(session: Session) -> int:
+    stmt = text(
+        "SELECT count(*) FROM prompt_logs WHERE date(created_at) = date('now')"
+    )
+    return session.exec(stmt).one()[0]
+
+
+def get_avg_latency(session: Session) -> float:
+    stmt = select(func.avg(PromptLog.latency_ms))
+    result = session.exec(stmt).one()
+    return round(result or 0.0, 1)
+
+
+def get_recent_grouped(session: Session, limit: int = 50) -> dict:
+    """Return recent logs grouped into today / yesterday / older."""
+    logs = get_prompt_logs(session, limit=limit)
+    groups = {"today": [], "yesterday": [], "older": []}
+    from datetime import date, timedelta
+    today = date.today()
+    yesterday = today - timedelta(days=1)
+    for log in logs:
+        log_date = log.created_at.date()
+        if log_date == today:
+            groups["today"].append(log)
+        elif log_date == yesterday:
+            groups["yesterday"].append(log)
+        else:
+            groups["older"].append(log)
+    return groups
+
+
 def get_distinct_providers(session: Session) -> List[str]:
     stmt = select(PromptLog.provider).distinct()
     return list(session.exec(stmt).all())

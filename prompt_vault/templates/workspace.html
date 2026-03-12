@@ -1,0 +1,355 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Prompt Vault</title>
+    <script src="https://unpkg.com/htmx.org@2.0.4/dist/htmx.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.9.0/build/styles/github-dark.min.css">
+    <script src="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.9.0/build/highlight.min.js"></script>
+    <link rel="stylesheet" href="/static/workspace.css">
+</head>
+<body>
+
+<!-- ── Top bar ── -->
+<header class="topbar">
+    <div class="topbar-left">
+        <a href="/" class="brand">Prompt Vault</a>
+        <span class="version">v0.3</span>
+    </div>
+    <div class="topbar-metrics">
+        <div class="metric">
+            <span class="metric-val">{{ today_count }}</span>
+            <span class="metric-lbl">today</span>
+        </div>
+        <div class="metric">
+            <span class="metric-val">{{ total }}</span>
+            <span class="metric-lbl">total</span>
+        </div>
+        <div class="metric">
+            <span class="metric-val">{{ avg_latency }}ms</span>
+            <span class="metric-lbl">avg latency</span>
+        </div>
+        {% for p in providers %}
+        <div class="metric">
+            <span class="metric-val">{{ p.count }}</span>
+            <span class="metric-lbl">{{ p.provider }}</span>
+        </div>
+        {% endfor %}
+    </div>
+    <nav class="topbar-nav">
+        <a href="/prompts">Prompts</a>
+        <a href="/stats">Stats</a>
+        <a href="/api/export?format=json">Export</a>
+    </nav>
+</header>
+
+<!-- ── Three-panel workspace ── -->
+<div class="workspace">
+
+    <!-- LEFT: History sidebar -->
+    <aside class="history-panel">
+        <div class="history-header">
+            <h3>History</h3>
+        </div>
+        <div class="history-list">
+            {% if history.today %}
+            <div class="history-group">
+                <div class="history-group-label">Today</div>
+                {% for log in history.today %}
+                <a href="/prompts/{{ log.id }}" class="history-item">
+                    <span class="history-prompt">{{ log.prompt[:50] }}{% if log.prompt|length > 50 %}...{% endif %}</span>
+                    <span class="history-meta">
+                        <span class="badge-sm badge-{{ log.provider }}">{{ log.provider }}</span>
+                        {{ "%.0f"|format(log.latency_ms) }}ms
+                    </span>
+                </a>
+                {% endfor %}
+            </div>
+            {% endif %}
+
+            {% if history.yesterday %}
+            <div class="history-group">
+                <div class="history-group-label">Yesterday</div>
+                {% for log in history.yesterday %}
+                <a href="/prompts/{{ log.id }}" class="history-item">
+                    <span class="history-prompt">{{ log.prompt[:50] }}{% if log.prompt|length > 50 %}...{% endif %}</span>
+                    <span class="history-meta">
+                        <span class="badge-sm badge-{{ log.provider }}">{{ log.provider }}</span>
+                        {{ "%.0f"|format(log.latency_ms) }}ms
+                    </span>
+                </a>
+                {% endfor %}
+            </div>
+            {% endif %}
+
+            {% if history.older %}
+            <div class="history-group">
+                <div class="history-group-label">Older</div>
+                {% for log in history.older %}
+                <a href="/prompts/{{ log.id }}" class="history-item">
+                    <span class="history-prompt">{{ log.prompt[:50] }}{% if log.prompt|length > 50 %}...{% endif %}</span>
+                    <span class="history-meta">
+                        <span class="badge-sm badge-{{ log.provider }}">{{ log.provider }}</span>
+                        {{ "%.0f"|format(log.latency_ms) }}ms
+                    </span>
+                </a>
+                {% endfor %}
+            </div>
+            {% endif %}
+
+            {% if not history.today and not history.yesterday and not history.older %}
+            <div class="history-empty">No prompts yet</div>
+            {% endif %}
+        </div>
+    </aside>
+
+    <!-- CENTER: Main prompt workspace -->
+    <main class="main-panel">
+        <div class="prompt-area">
+            <textarea id="prompt-input" rows="5" placeholder="Ask anything..." autofocus></textarea>
+            <div class="prompt-controls">
+                <select id="model-select">
+                    {% for provider in provider_list %}
+                    {% for model in known_models.get(provider, []) %}
+                    <option value="{{ provider }}|{{ model }}">{{ provider }}/{{ model }}</option>
+                    {% endfor %}
+                    {% endfor %}
+                </select>
+                <div class="prompt-buttons">
+                    <button class="btn btn-primary" id="run-btn" onclick="runPrompt()">Run Prompt</button>
+                    <button class="btn" id="compare-btn" onclick="runCompare()">Compare Models</button>
+                </div>
+            </div>
+        </div>
+
+        <div id="response-area">
+            <div class="welcome-state">
+                <h2>Prompt Vault Workspace</h2>
+                <p>Select a model and run a prompt. Responses render here with full markdown and code formatting.</p>
+                <p>Every prompt is logged automatically.</p>
+            </div>
+        </div>
+    </main>
+
+    <!-- RIGHT: Compare panel -->
+    <aside class="compare-panel" id="compare-panel">
+        <div class="compare-panel-header">
+            <h3>Compare</h3>
+            <button class="btn-icon" onclick="clearCompare()" title="Clear">&times;</button>
+        </div>
+        <div id="compare-results" class="compare-results">
+            <div class="compare-empty">
+                <p>Click "Compare Models" to run your prompt against all available models side-by-side.</p>
+            </div>
+        </div>
+    </aside>
+
+</div>
+
+<script>
+const KNOWN_MODELS = {{ known_models | tojson }};
+const PROVIDERS = {{ provider_list | tojson }};
+
+// Configure marked for code highlighting
+marked.setOptions({
+    highlight: function(code, lang) {
+        if (lang && hljs.getLanguage(lang)) {
+            return hljs.highlight(code, {language: lang}).value;
+        }
+        return hljs.highlightAuto(code).value;
+    },
+    breaks: true,
+});
+
+function renderMarkdown(text) {
+    try {
+        return marked.parse(text);
+    } catch (e) {
+        return '<pre>' + escapeHtml(text) + '</pre>';
+    }
+}
+
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
+function getSelectedModel() {
+    const val = document.getElementById('model-select').value;
+    const [provider, model] = val.split('|');
+    return {provider, model};
+}
+
+function setLoading(btnId, loading, label) {
+    const btn = document.getElementById(btnId);
+    btn.disabled = loading;
+    btn.textContent = loading ? 'Running...' : label;
+}
+
+// ── Run single prompt ──
+function runPrompt() {
+    const prompt = document.getElementById('prompt-input').value.trim();
+    if (!prompt) return;
+
+    const {provider, model} = getSelectedModel();
+    setLoading('run-btn', true, 'Run Prompt');
+
+    const responseArea = document.getElementById('response-area');
+    responseArea.innerHTML = '<div class="loading-state"><div class="spinner"></div><p>Thinking...</p></div>';
+
+    fetch('/api/ask', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({provider, model, prompt})
+    })
+    .then(r => r.json())
+    .then(data => {
+        setLoading('run-btn', false, 'Run Prompt');
+        if (data.response) {
+            responseArea.innerHTML = `
+                <div class="response-card">
+                    <div class="response-header">
+                        <span class="badge badge-${data.provider}">${data.provider}</span>
+                        <span class="mono">${data.model}</span>
+                        <span class="latency">${data.latency_ms.toFixed(0)}ms</span>
+                        <button class="btn-icon" onclick="copyResponse(this)" title="Copy">&#x2398;</button>
+                    </div>
+                    <div class="response-body markdown-body">${renderMarkdown(data.response)}</div>
+                    <div class="response-raw" style="display:none">${escapeHtml(data.response)}</div>
+                </div>`;
+            hljs.highlightAll();
+            addToHistory(prompt, data);
+        } else {
+            responseArea.innerHTML = `<div class="error-card"><p>Error: ${data.detail || 'Unknown error'}</p></div>`;
+        }
+    })
+    .catch(err => {
+        setLoading('run-btn', false, 'Run Prompt');
+        responseArea.innerHTML = '<div class="error-card"><p>Request failed. Is the server running?</p></div>';
+    });
+}
+
+// ── Compare across all models ──
+function runCompare() {
+    const prompt = document.getElementById('prompt-input').value.trim();
+    if (!prompt) return;
+
+    // Build model list: all known models
+    const models = [];
+    for (const [provider, modelList] of Object.entries(KNOWN_MODELS)) {
+        for (const model of modelList) {
+            models.push({provider, model});
+        }
+    }
+
+    setLoading('compare-btn', true, 'Compare Models');
+
+    const resultsDiv = document.getElementById('compare-results');
+    resultsDiv.innerHTML = '<div class="loading-state"><div class="spinner"></div><p>Comparing models...</p></div>';
+
+    // Show the panel
+    document.getElementById('compare-panel').classList.add('open');
+
+    fetch('/api/compare', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({prompt, models})
+    })
+    .then(r => r.json())
+    .then(data => {
+        setLoading('compare-btn', false, 'Compare Models');
+        if (data.results) {
+            let html = '';
+            data.results.forEach(r => {
+                const content = r.error
+                    ? `<div class="compare-error">Error: ${escapeHtml(r.error)}</div>`
+                    : `<div class="markdown-body">${renderMarkdown(r.response)}</div>`;
+                html += `
+                    <div class="compare-result-card">
+                        <div class="compare-result-header">
+                            <span class="badge badge-${r.provider}">${r.provider}</span>
+                            <span class="mono">${r.model}</span>
+                            <span class="latency">${r.latency_ms.toFixed(0)}ms</span>
+                        </div>
+                        ${content}
+                    </div>`;
+            });
+            resultsDiv.innerHTML = html;
+            hljs.highlightAll();
+        } else {
+            resultsDiv.innerHTML = `<div class="error-card"><p>Error: ${data.detail || 'Unknown'}</p></div>`;
+        }
+    })
+    .catch(() => {
+        setLoading('compare-btn', false, 'Compare Models');
+        resultsDiv.innerHTML = '<div class="error-card"><p>Compare request failed</p></div>';
+    });
+}
+
+function clearCompare() {
+    document.getElementById('compare-results').innerHTML = '<div class="compare-empty"><p>Click "Compare Models" to run your prompt against all available models side-by-side.</p></div>';
+    document.getElementById('compare-panel').classList.remove('open');
+}
+
+function copyResponse(btn) {
+    const card = btn.closest('.response-card');
+    const raw = card.querySelector('.response-raw').textContent;
+    navigator.clipboard.writeText(raw).then(() => {
+        btn.textContent = '\u2713';
+        setTimeout(() => btn.innerHTML = '&#x2398;', 1500);
+    });
+}
+
+function addToHistory(prompt, data) {
+    const list = document.querySelector('.history-list');
+    const todayGroup = list.querySelector('.history-group');
+    const item = document.createElement('a');
+    item.className = 'history-item history-new';
+    item.href = '#';
+    item.innerHTML = `
+        <span class="history-prompt">${escapeHtml(prompt.substring(0, 50))}${prompt.length > 50 ? '...' : ''}</span>
+        <span class="history-meta">
+            <span class="badge-sm badge-${data.provider}">${data.provider}</span>
+            ${data.latency_ms.toFixed(0)}ms
+        </span>`;
+
+    if (todayGroup) {
+        const label = todayGroup.querySelector('.history-group-label');
+        if (label && label.textContent === 'Today') {
+            label.after(item);
+        } else {
+            const newGroup = document.createElement('div');
+            newGroup.className = 'history-group';
+            newGroup.innerHTML = '<div class="history-group-label">Today</div>';
+            newGroup.appendChild(item);
+            list.prepend(newGroup);
+        }
+    } else {
+        const newGroup = document.createElement('div');
+        newGroup.className = 'history-group';
+        newGroup.innerHTML = '<div class="history-group-label">Today</div>';
+        newGroup.appendChild(item);
+        list.innerHTML = '';
+        list.appendChild(newGroup);
+    }
+
+    // Update today count
+    const todayMetric = document.querySelector('.metric-val');
+    if (todayMetric) {
+        todayMetric.textContent = parseInt(todayMetric.textContent) + 1;
+    }
+}
+
+// Ctrl+Enter to submit
+document.getElementById('prompt-input').addEventListener('keydown', function(e) {
+    if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+        e.preventDefault();
+        runPrompt();
+    }
+});
+</script>
+</body>
+</html>

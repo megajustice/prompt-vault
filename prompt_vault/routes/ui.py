@@ -11,6 +11,9 @@ from prompt_vault.services.prompt_service import (
     get_prompt_logs,
     search_prompt_logs,
     get_total_count,
+    get_today_count,
+    get_avg_latency,
+    get_recent_grouped,
     get_provider_breakdown,
     get_model_breakdown,
     get_avg_latency_by_provider,
@@ -30,18 +33,16 @@ router = APIRouter(tags=["ui"])
 
 
 @router.get("/", response_class=HTMLResponse)
-def dashboard(request: Request, session: Session = Depends(get_session)):
-    return templates.TemplateResponse("dashboard.html", {
+def workspace(request: Request, session: Session = Depends(get_session)):
+    return templates.TemplateResponse("workspace.html", {
         "request": request,
         "total": get_total_count(session),
+        "today_count": get_today_count(session),
+        "avg_latency": get_avg_latency(session),
         "providers": get_provider_breakdown(session),
-        "models": get_model_breakdown(session),
-        "latency_by_provider": get_avg_latency_by_provider(session),
-        "latency_by_model": get_avg_latency_by_model(session),
-        "status_breakdown": get_status_breakdown(session),
-        "daily_volume": get_daily_volume(session),
-        "tokens": get_token_totals(session),
-        "recent": get_prompt_logs(session, limit=10),
+        "history": get_recent_grouped(session, limit=60),
+        "known_models": KNOWN_MODELS,
+        "provider_list": list_providers(),
     })
 
 

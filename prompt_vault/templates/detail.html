@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block title %}Log #{{ entry.id }} - Prompt Vault{% endblock %}
 {% block content %}
-<a href="/prompts" class="back-link">Back to prompts</a>
+<a href="/" class="back-link">Back to workspace</a>
 
 <div class="detail-card">
     <div class="detail-header">
@@ -48,8 +48,9 @@
 
     <div class="detail-actions">
         <button class="btn" onclick="copyToClipboard('prompt-text')">Copy Prompt</button>
-        <button class="btn" onclick="copyToClipboard('response-text')">Copy Response</button>
+        <button class="btn" onclick="copyToClipboard('response-raw')">Copy Response</button>
         <button class="btn btn-primary" onclick="toggleReplay()">Replay</button>
+        <a href="/?prefill={{ entry.prompt|urlencode }}" class="btn">Open in Workspace</a>
     </div>
 
     <div id="replay-form" style="display:none;" class="replay-section">
@@ -77,7 +78,8 @@
 
     <div class="section">
         <h3>Response</h3>
-        <pre id="response-text">{{ entry.response }}</pre>
+        <div id="response-rendered" class="rendered-response"></div>
+        <div id="response-raw" style="display:none">{{ entry.response }}</div>
     </div>
 
     {% if entry.error_message %}
@@ -118,8 +120,24 @@
 {% endblock %}
 
 {% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.9.0/build/styles/github-dark.min.css">
+<script src="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.9.0/build/highlight.min.js"></script>
 <script>
 const KNOWN_MODELS = {{ known_models | tojson }};
+
+// Render the response as markdown
+marked.setOptions({
+    highlight: function(code, lang) {
+        if (lang && hljs.getLanguage(lang)) return hljs.highlight(code, {language: lang}).value;
+        return hljs.highlightAuto(code).value;
+    },
+    breaks: true,
+});
+
+const rawResponse = document.getElementById('response-raw').textContent;
+document.getElementById('response-rendered').innerHTML = marked.parse(rawResponse);
+hljs.highlightAll();
 
 function updateReplayModels() {
     const provider = document.getElementById('replay-provider').value;
@@ -129,7 +147,8 @@ function updateReplayModels() {
 }
 
 function copyToClipboard(id) {
-    const text = document.getElementById(id).innerText;
+    const el = document.getElementById(id);
+    const text = el.textContent || el.innerText;
     navigator.clipboard.writeText(text).then(() => {
         const btn = event.target;
         const orig = btn.textContent;
@@ -149,9 +168,7 @@ function saveTags(logId) {
         method: 'PATCH',
         headers: {'Content-Type': 'application/json'},
         body: JSON.stringify({tags: tags})
-    }).then(r => r.json()).then(data => {
-        location.reload();
-    });
+    }).then(r => r.json()).then(() => location.reload());
 }
 
 function toggleReplay() {
@@ -173,12 +190,13 @@ function doReplay(logId) {
     .then(r => r.json())
     .then(data => {
         if (data.new_id) {
-            resultDiv.innerHTML = '<p>Replay saved as <a href="/prompts/' + data.new_id + '">#' + data.new_id + '</a> (' + data.latency_ms.toFixed(0) + 'ms)</p><pre>' + data.response + '</pre>';
+            resultDiv.innerHTML = '<p>Replay saved as <a href="/prompts/' + data.new_id + '">#' + data.new_id + '</a> (' + data.latency_ms.toFixed(0) + 'ms)</p><div class="rendered-response">' + marked.parse(data.response) + '</div>';
+            hljs.highlightAll();
         } else {
             resultDiv.innerHTML = '<p class="error-text">Error: ' + (data.detail || 'Unknown error') + '</p>';
         }
     })
-    .catch(err => {
+    .catch(() => {
         resultDiv.innerHTML = '<p class="error-text">Request failed</p>';
     });
 }
