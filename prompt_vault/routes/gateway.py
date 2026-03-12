@@ -1,3 +1,5 @@
+from typing import List
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlmodel import Session
 from pydantic import BaseModel
@@ -62,3 +64,76 @@ def ask(req: AskRequest, session: Session = Depends(get_session)):
         model=result["model"],
         latency_ms=result["latency_ms"],
     )
+
+
+class ModelTarget(BaseModel):
+    provider: str
+    model: str
+
+
+class CompareRequest(BaseModel):
+    prompt: str
+    models: List[ModelTarget]
+
+
+class CompareResult(BaseModel):
+    response: str
+    provider: str
+    model: str
+    latency_ms: float
+    error: str = None
+
+
+class CompareResponse(BaseModel):
+    prompt: str
+    results: List[CompareResult]
+
+
+@router.post("/compare", response_model=CompareResponse)
+def compare(req: CompareRequest, session: Session = Depends(get_session)):
+    if not req.models:
+        raise HTTPException(status_code=400, detail="At least one model is required")
+
+    results = []
+    for target in req.models:
+        if target.provider not in PROVIDERS:
+            results.append(CompareResult(
+                response="",
+                provider=target.provider,
+                model=target.model,
+                latency_ms=0,
+                error=f"Unknown provider '{target.provider}'",
+            ))
+            continue
+
+        call_fn = PROVIDERS[target.provider]
+        try:
+            result = call_fn(prompt=req.prompt, model=target.model)
+        except (ValueError, RuntimeError) as e:
+            results.append(CompareResult(
+                response="",
+                provider=target.provider,
+                model=target.model,
+                latency_ms=0,
+                error=str(e),
+            ))
+            continue
+
+        log_data = PromptLogCreate(
+            prompt=req.prompt,
+            response=result["response"],
+            model=result["model"],
+            provider=result["provider"],
+            latency_ms=result["latency_ms"],
+            tags="compare",
+        )
+        create_prompt_log(session, log_data)
+
+        results.append(CompareResult(
+            response=result["response"],
+            provider=result["provider"],
+            model=result["model"],
+            latency_ms=result["latency_ms"],
+        ))
+
+    return CompareResponse(prompt=req.prompt, results=results)
