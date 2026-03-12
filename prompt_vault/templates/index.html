@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="search-bar">
+    <input
+        type="search"
+        name="q"
+        placeholder="Search prompts, models, providers..."
+        value="{{ query|default('') }}"
+        hx-get="/search"
+        hx-trigger="input changed delay:300ms, search"
+        hx-target="#prompt-list"
+        hx-indicator="#spinner"
+    >
+    <span id="spinner" class="htmx-indicator">Searching...</span>
+</div>
+
+<div id="prompt-list">
+    {% include "partials/prompt_list.html" %}
+</div>
+{% endblock %}

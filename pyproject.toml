@@ -1,0 +1,16 @@
+[project]
+name = "prompt-vault"
+version = "0.1.0"
+description = "Track prompts and responses across multiple LLM providers"
+readme = "README.md"
+license = {text = "MIT"}
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi>=0.115.0",
+    "uvicorn[standard]>=0.32.0",
+    "sqlmodel>=0.0.22",
+    "jinja2>=3.1.4",
+]
+
+[project.scripts]
+prompt-vault = "prompt_vault.main:app"

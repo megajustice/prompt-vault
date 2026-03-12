@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+{% block content %}
+<a href="/" class="back-link">Back to list</a>
+
+<div class="detail-card">
+    <div class="detail-header">
+        <h2>Log #{{ entry.id }}</h2>
+        <div class="meta">
+            <span class="badge">{{ entry.provider }}</span>
+            <span class="model">{{ entry.model }}</span>
+            <span class="latency">{{ "%.0f"|format(entry.latency_ms) }}ms</span>
+            <span class="date">{{ entry.created_at.strftime('%Y-%m-%d %H:%M:%S UTC') }}</span>
+        </div>
+    </div>
+
+    {% if entry.tags %}
+    <div class="tags">
+        {% for tag in entry.tags.split(',') %}
+        <span class="tag">{{ tag.strip() }}</span>
+        {% endfor %}
+    </div>
+    {% endif %}
+
+    <div class="section">
+        <h3>Prompt</h3>
+        <pre>{{ entry.prompt }}</pre>
+    </div>
+
+    <div class="section">
+        <h3>Response</h3>
+        <pre>{{ entry.response }}</pre>
+    </div>
+</div>
+{% endblock %}
