@@ -1,0 +1,118 @@
+{% extends "base.html" %}
+{% block title %}Compare - Prompt Vault{% endblock %}
+{% block content %}
+<h1 class="page-title">Compare Models</h1>
+
+<div class="card">
+    <div class="compare-form">
+        <div class="form-group">
+            <label>Prompt</label>
+            <textarea id="compare-prompt" rows="4" placeholder="Enter your prompt here..."></textarea>
+        </div>
+
+        <div id="model-targets">
+            <div class="model-row">
+                <select class="target-provider">
+                    {% for p in providers %}
+                    <option value="{{ p }}">{{ p }}</option>
+                    {% endfor %}
+                </select>
+                <input type="text" class="target-model" placeholder="model name (e.g. gpt-4o)">
+            </div>
+            <div class="model-row">
+                <select class="target-provider">
+                    {% for p in providers %}
+                    <option value="{{ p }}" {% if loop.last %}selected{% endif %}>{{ p }}</option>
+                    {% endfor %}
+                </select>
+                <input type="text" class="target-model" placeholder="model name (e.g. claude-sonnet-4-6)">
+            </div>
+        </div>
+
+        <div class="form-actions">
+            <button class="btn btn-sm" onclick="addModelRow()">+ Add Model</button>
+            <button class="btn btn-primary" id="compare-btn" onclick="runCompare()">Compare</button>
+        </div>
+    </div>
+</div>
+
+<div id="compare-results"></div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function addModelRow() {
+    const container = document.getElementById('model-targets');
+    const row = document.createElement('div');
+    row.className = 'model-row';
+    row.innerHTML = `
+        <select class="target-provider">
+            {% for p in providers %}<option value="{{ p }}">{{ p }}</option>{% endfor %}
+        </select>
+        <input type="text" class="target-model" placeholder="model name">
+        <button class="btn btn-xs btn-danger" onclick="this.parentElement.remove()">X</button>
+    `;
+    container.appendChild(row);
+}
+
+function runCompare() {
+    const prompt = document.getElementById('compare-prompt').value;
+    if (!prompt.trim()) return alert('Enter a prompt');
+
+    const rows = document.querySelectorAll('.model-row');
+    const models = [];
+    rows.forEach(row => {
+        const provider = row.querySelector('.target-provider').value;
+        const model = row.querySelector('.target-model').value;
+        if (model.trim()) {
+            models.push({provider, model: model.trim()});
+        }
+    });
+
+    if (!models.length) return alert('Add at least one model');
+
+    const btn = document.getElementById('compare-btn');
+    btn.disabled = true;
+    btn.textContent = 'Comparing...';
+
+    const resultsDiv = document.getElementById('compare-results');
+    resultsDiv.innerHTML = '<div class="card"><p class="text-dim">Running comparison...</p></div>';
+
+    fetch('/api/compare', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({prompt, models})
+    })
+    .then(r => r.json())
+    .then(data => {
+        btn.disabled = false;
+        btn.textContent = 'Compare';
+
+        if (data.results) {
+            let html = '<div class="compare-grid">';
+            data.results.forEach(r => {
+                const statusClass = r.error ? 'error' : 'success';
+                html += `
+                <div class="compare-card">
+                    <div class="compare-card-header">
+                        <span class="badge badge-${r.provider}">${r.provider}</span>
+                        <span class="mono">${r.model}</span>
+                        <span class="latency">${r.latency_ms.toFixed(0)}ms</span>
+                    </div>
+                    <pre class="compare-response">${r.error ? 'Error: ' + r.error : r.response}</pre>
+                </div>`;
+            });
+            html += '</div>';
+            resultsDiv.innerHTML = html;
+        } else {
+            resultsDiv.innerHTML = '<div class="card"><p class="error-text">Error: ' + (data.detail || 'Unknown') + '</p></div>';
+        }
+    })
+    .catch(() => {
+        btn.disabled = false;
+        btn.textContent = 'Compare';
+        resultsDiv.innerHTML = '<div class="card"><p class="error-text">Request failed</p></div>';
+    });
+}
+</script>
+{% endblock %}

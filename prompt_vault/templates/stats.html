@@ -1,0 +1,129 @@
+{% extends "base.html" %}
+{% block title %}Stats - Prompt Vault{% endblock %}
+{% block content %}
+<h1 class="page-title">Analytics</h1>
+
+<div class="stat-cards">
+    <div class="stat-card">
+        <div class="stat-value">{{ total }}</div>
+        <div class="stat-label">Total Prompts</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-value">{{ "{:,}".format(tokens.prompt_tokens) }}</div>
+        <div class="stat-label">Prompt Tokens</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-value">{{ "{:,}".format(tokens.completion_tokens) }}</div>
+        <div class="stat-label">Completion Tokens</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-value">{{ "{:,}".format(tokens.total_tokens) }}</div>
+        <div class="stat-label">Total Tokens</div>
+    </div>
+</div>
+
+<div class="grid-2">
+    <div class="card">
+        <h3>Status Breakdown</h3>
+        {% if status_breakdown %}
+        <div class="bar-chart">
+            {% set max_s = status_breakdown|map(attribute='count')|max %}
+            {% for s in status_breakdown %}
+            <div class="bar-row">
+                <span class="bar-label"><span class="status-dot status-{{ s.status }}"></span> {{ s.status }}</span>
+                <div class="bar-track">
+                    <div class="bar-fill bar-status-{{ s.status }}" style="width: {{ (s.count / max_s * 100)|int }}%"></div>
+                </div>
+                <span class="bar-value">{{ s.count }}</span>
+            </div>
+            {% endfor %}
+        </div>
+        {% else %}
+        <p class="empty-text">No data yet</p>
+        {% endif %}
+    </div>
+
+    <div class="card">
+        <h3>Volume by Provider</h3>
+        {% if providers %}
+        <div class="bar-chart">
+            {% set max_p = providers[0].count if providers else 1 %}
+            {% for p in providers %}
+            <div class="bar-row">
+                <span class="bar-label">{{ p.provider }}</span>
+                <div class="bar-track">
+                    <div class="bar-fill" style="width: {{ (p.count / max_p * 100)|int }}%"></div>
+                </div>
+                <span class="bar-value">{{ p.count }}</span>
+            </div>
+            {% endfor %}
+        </div>
+        {% else %}
+        <p class="empty-text">No data yet</p>
+        {% endif %}
+    </div>
+</div>
+
+<div class="card">
+    <h3>Latency by Model</h3>
+    {% if latency_by_model %}
+    <table>
+        <thead>
+            <tr>
+                <th>Provider</th>
+                <th>Model</th>
+                <th>Avg Latency</th>
+                <th>Requests</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for lm in latency_by_model %}
+            <tr>
+                <td><span class="badge badge-{{ lm.provider }}">{{ lm.provider }}</span></td>
+                <td class="mono">{{ lm.model }}</td>
+                <td>{{ lm.avg_ms }}ms</td>
+                <td>{{ lm.count }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <p class="empty-text">No data yet</p>
+    {% endif %}
+</div>
+
+<div class="card">
+    <h3>Volume by Model</h3>
+    {% if models %}
+    <div class="bar-chart">
+        {% set max_m = models[0].count if models else 1 %}
+        {% for m in models %}
+        <div class="bar-row">
+            <span class="bar-label">{{ m.provider }}/{{ m.model }}</span>
+            <div class="bar-track">
+                <div class="bar-fill" style="width: {{ (m.count / max_m * 100)|int }}%"></div>
+            </div>
+            <span class="bar-value">{{ m.count }}</span>
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+    <p class="empty-text">No data yet</p>
+    {% endif %}
+</div>
+
+{% if daily_volume %}
+<div class="card">
+    <h3>Daily Volume (last 30 days)</h3>
+    <div class="daily-chart">
+        {% set max_d = daily_volume|map(attribute='count')|max %}
+        {% for d in daily_volume %}
+        <div class="day-bar" title="{{ d.day }}: {{ d.count }} prompts">
+            <div class="day-fill" style="height: {{ (d.count / max_d * 100)|int }}%"></div>
+            <span class="day-label">{{ d.day[-5:] }}</span>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+{% endif %}
+{% endblock %}

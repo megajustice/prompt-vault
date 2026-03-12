@@ -1,34 +1,173 @@
 {% extends "base.html" %}
+{% block title %}Log #{{ entry.id }} - Prompt Vault{% endblock %}
 {% block content %}
-<a href="/" class="back-link">Back to list</a>
+<a href="/prompts" class="back-link">Back to prompts</a>
 
 <div class="detail-card">
     <div class="detail-header">
         <h2>Log #{{ entry.id }}</h2>
         <div class="meta">
-            <span class="badge">{{ entry.provider }}</span>
-            <span class="model">{{ entry.model }}</span>
+            <span class="badge badge-{{ entry.provider }}">{{ entry.provider }}</span>
+            <span class="mono">{{ entry.model }}</span>
             <span class="latency">{{ "%.0f"|format(entry.latency_ms) }}ms</span>
+            <span class="status-dot status-{{ entry.status }}"></span>
+            <span>{{ entry.status }}</span>
             <span class="date">{{ entry.created_at.strftime('%Y-%m-%d %H:%M:%S UTC') }}</span>
         </div>
     </div>
 
-    {% if entry.tags %}
-    <div class="tags">
-        {% for tag in entry.tags.split(',') %}
-        <span class="tag">{{ tag.strip() }}</span>
-        {% endfor %}
+    {% if entry.prompt_tokens or entry.completion_tokens or entry.total_tokens %}
+    <div class="token-info">
+        {% if entry.prompt_tokens %}<span>Prompt: {{ entry.prompt_tokens }} tokens</span>{% endif %}
+        {% if entry.completion_tokens %}<span>Completion: {{ entry.completion_tokens }} tokens</span>{% endif %}
+        {% if entry.total_tokens %}<span>Total: {{ entry.total_tokens }} tokens</span>{% endif %}
     </div>
     {% endif %}
 
+    {% if entry.replay_of %}
+    <div class="replay-badge">Replay of <a href="/prompts/{{ entry.replay_of }}">#{{ entry.replay_of }}</a></div>
+    {% endif %}
+
+    <div class="tags-section">
+        <span class="tags-label">Tags:</span>
+        <span id="tags-display">
+            {% if entry.tags %}
+            {% for tag in entry.tags.split(',') %}
+            <span class="tag">{{ tag.strip() }}</span>
+            {% endfor %}
+            {% else %}
+            <span class="text-dim">none</span>
+            {% endif %}
+        </span>
+        <button class="btn btn-xs" onclick="toggleTagEdit()">Edit</button>
+        <div id="tag-editor" style="display:none;" class="tag-editor">
+            <input type="text" id="tag-input" value="{{ entry.tags or '' }}" placeholder="comma-separated tags">
+            <button class="btn btn-xs btn-primary" onclick="saveTags({{ entry.id }})">Save</button>
+        </div>
+    </div>
+
+    <div class="detail-actions">
+        <button class="btn" onclick="copyToClipboard('prompt-text')">Copy Prompt</button>
+        <button class="btn" onclick="copyToClipboard('response-text')">Copy Response</button>
+        <button class="btn btn-primary" onclick="toggleReplay()">Replay</button>
+    </div>
+
+    <div id="replay-form" style="display:none;" class="replay-section">
+        <h3>Replay this prompt</h3>
+        <div class="replay-controls">
+            <select id="replay-provider">
+                {% for p in available_providers %}
+                <option value="{{ p }}" {% if p == entry.provider %}selected{% endif %}>{{ p }}</option>
+                {% endfor %}
+            </select>
+            <input type="text" id="replay-model" value="{{ entry.model }}" placeholder="model name">
+            <button class="btn btn-primary" onclick="doReplay({{ entry.id }})">Send</button>
+        </div>
+        <div id="replay-result"></div>
+    </div>
+
     <div class="section">
         <h3>Prompt</h3>
-        <pre>{{ entry.prompt }}</pre>
+        <pre id="prompt-text">{{ entry.prompt }}</pre>
     </div>
 
     <div class="section">
         <h3>Response</h3>
-        <pre>{{ entry.response }}</pre>
+        <pre id="response-text">{{ entry.response }}</pre>
     </div>
+
+    {% if entry.error_message %}
+    <div class="section">
+        <h3>Error</h3>
+        <pre class="error-pre">{{ entry.error_message }}</pre>
+    </div>
+    {% endif %}
+
+    {% if replay_chain %}
+    <div class="section">
+        <h3>Replays of this prompt</h3>
+        <table>
+            <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>Provider</th>
+                    <th>Model</th>
+                    <th>Latency</th>
+                    <th>Created</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for r in replay_chain %}
+                <tr class="clickable" onclick="window.location='/prompts/{{ r.id }}'">
+                    <td>{{ r.id }}</td>
+                    <td><span class="badge badge-{{ r.provider }}">{{ r.provider }}</span></td>
+                    <td class="mono">{{ r.model }}</td>
+                    <td>{{ "%.0f"|format(r.latency_ms) }}ms</td>
+                    <td>{{ r.created_at.strftime('%Y-%m-%d %H:%M') }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% endif %}
 </div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function copyToClipboard(id) {
+    const text = document.getElementById(id).innerText;
+    navigator.clipboard.writeText(text).then(() => {
+        const btn = event.target;
+        const orig = btn.textContent;
+        btn.textContent = 'Copied!';
+        setTimeout(() => btn.textContent = orig, 1500);
+    });
+}
+
+function toggleTagEdit() {
+    const editor = document.getElementById('tag-editor');
+    editor.style.display = editor.style.display === 'none' ? 'flex' : 'none';
+}
+
+function saveTags(logId) {
+    const tags = document.getElementById('tag-input').value;
+    fetch('/api/logs/' + logId + '/tags', {
+        method: 'PATCH',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({tags: tags})
+    }).then(r => r.json()).then(data => {
+        location.reload();
+    });
+}
+
+function toggleReplay() {
+    const form = document.getElementById('replay-form');
+    form.style.display = form.style.display === 'none' ? 'block' : 'none';
+}
+
+function doReplay(logId) {
+    const provider = document.getElementById('replay-provider').value;
+    const model = document.getElementById('replay-model').value;
+    const resultDiv = document.getElementById('replay-result');
+    resultDiv.innerHTML = '<p class="text-dim">Sending...</p>';
+
+    fetch('/api/replay', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({log_id: logId, provider: provider, model: model})
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.new_id) {
+            resultDiv.innerHTML = '<p>Replay saved as <a href="/prompts/' + data.new_id + '">#' + data.new_id + '</a> (' + data.latency_ms.toFixed(0) + 'ms)</p><pre>' + data.response + '</pre>';
+        } else {
+            resultDiv.innerHTML = '<p class="error-text">Error: ' + (data.detail || 'Unknown error') + '</p>';
+        }
+    })
+    .catch(err => {
+        resultDiv.innerHTML = '<p class="error-text">Request failed</p>';
+    });
+}
+</script>
 {% endblock %}

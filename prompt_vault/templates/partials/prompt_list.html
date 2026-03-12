@@ -7,17 +7,21 @@
             <th>Model</th>
             <th>Prompt</th>
             <th>Latency</th>
+            <th>Status</th>
+            <th>Tokens</th>
             <th>Created</th>
         </tr>
     </thead>
     <tbody>
         {% for log in logs %}
-        <tr class="clickable" onclick="window.location='/logs/{{ log.id }}'">
+        <tr class="clickable" onclick="window.location='/prompts/{{ log.id }}'">
             <td>{{ log.id }}</td>
-            <td><span class="badge">{{ log.provider }}</span></td>
-            <td>{{ log.model }}</td>
-            <td class="truncate">{{ log.prompt[:80] }}{% if log.prompt|length > 80 %}...{% endif %}</td>
+            <td><span class="badge badge-{{ log.provider }}">{{ log.provider }}</span></td>
+            <td class="mono">{{ log.model }}</td>
+            <td class="truncate">{{ log.prompt[:60] }}{% if log.prompt|length > 60 %}...{% endif %}</td>
             <td>{{ "%.0f"|format(log.latency_ms) }}ms</td>
+            <td><span class="status-dot status-{{ log.status }}"></span> {{ log.status }}</td>
+            <td>{{ log.total_tokens or '-' }}</td>
             <td>{{ log.created_at.strftime('%Y-%m-%d %H:%M') }}</td>
         </tr>
         {% endfor %}
@@ -25,7 +29,7 @@
 </table>
 {% else %}
 <div class="empty-state">
-    <p>No prompt logs yet.</p>
-    <p>Send a POST to <code>/api/logs</code> to start tracking.</p>
+    <p>No prompt logs found.</p>
+    <p>Send a POST to <code>/api/ask</code> or <code>/v1/chat/completions</code> to start tracking.</p>
 </div>
 {% endif %}

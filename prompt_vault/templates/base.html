@@ -3,17 +3,30 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Prompt Vault</title>
+    <title>{% block title %}Prompt Vault{% endblock %}</title>
     <script src="https://unpkg.com/htmx.org@2.0.4/dist/htmx.min.js"></script>
     <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
-    <header>
-        <a href="/"><h1>Prompt Vault</h1></a>
-        <p class="subtitle">Track prompts across LLM providers</p>
-    </header>
-    <main>
+    <nav class="sidebar">
+        <div class="logo">
+            <a href="/">Prompt Vault</a>
+            <span class="version">v0.2</span>
+        </div>
+        <ul class="nav-links">
+            <li><a href="/" class="{% if request.url.path == '/' %}active{% endif %}">Dashboard</a></li>
+            <li><a href="/prompts" class="{% if '/prompts' in request.url.path %}active{% endif %}">Prompts</a></li>
+            <li><a href="/compare" class="{% if request.url.path == '/compare' %}active{% endif %}">Compare</a></li>
+            <li><a href="/stats" class="{% if request.url.path == '/stats' %}active{% endif %}">Stats</a></li>
+        </ul>
+        <div class="nav-footer">
+            <a href="/api/export?format=json" class="export-link">Export JSON</a>
+            <a href="/api/export?format=csv" class="export-link">Export CSV</a>
+        </div>
+    </nav>
+    <main class="content">
         {% block content %}{% endblock %}
     </main>
+    {% block scripts %}{% endblock %}
 </body>
 </html>

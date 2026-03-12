@@ -1,3 +1,5 @@
+from typing import List, Optional
+
 from fastapi import APIRouter, Depends, Query
 from sqlmodel import Session
 
@@ -8,6 +10,16 @@ from prompt_vault.services.prompt_service import (
     get_prompt_log,
     get_prompt_logs,
     search_prompt_logs,
+    get_total_count,
+    get_provider_breakdown,
+    get_model_breakdown,
+    get_avg_latency_by_provider,
+    get_avg_latency_by_model,
+    get_status_breakdown,
+    get_daily_volume,
+    get_token_totals,
+    get_distinct_providers,
+    get_distinct_models,
 )
 
 router = APIRouter(prefix="/api", tags=["api"])
@@ -18,16 +30,23 @@ def log_prompt(data: PromptLogCreate, session: Session = Depends(get_session)):
     return create_prompt_log(session, data)
 
 
-@router.get("/logs", response_model=list[PromptLog])
+@router.get("/logs", response_model=List[PromptLog])
 def list_logs(
     skip: int = 0,
     limit: int = Query(default=50, le=200),
+    provider: Optional[str] = None,
+    model: Optional[str] = None,
+    status: Optional[str] = None,
+    tag: Optional[str] = None,
     session: Session = Depends(get_session),
 ):
-    return get_prompt_logs(session, skip=skip, limit=limit)
+    return get_prompt_logs(
+        session, skip=skip, limit=limit,
+        provider=provider, model=model, status=status, tag=tag,
+    )
 
 
-@router.get("/logs/search", response_model=list[PromptLog])
+@router.get("/logs/search", response_model=List[PromptLog])
 def search_logs(
     q: str = Query(min_length=1),
     limit: int = Query(default=50, le=200),
@@ -43,3 +62,25 @@ def get_log(log_id: int, session: Session = Depends(get_session)):
         from fastapi import HTTPException
         raise HTTPException(status_code=404, detail="Log not found")
     return entry
+
+
+@router.get("/stats")
+def get_stats(session: Session = Depends(get_session)):
+    return {
+        "total_prompts": get_total_count(session),
+        "providers": get_provider_breakdown(session),
+        "models": get_model_breakdown(session),
+        "avg_latency_by_provider": get_avg_latency_by_provider(session),
+        "avg_latency_by_model": get_avg_latency_by_model(session),
+        "status_breakdown": get_status_breakdown(session),
+        "daily_volume": get_daily_volume(session),
+        "token_totals": get_token_totals(session),
+    }
+
+
+@router.get("/filters")
+def get_filters(session: Session = Depends(get_session)):
+    return {
+        "providers": get_distinct_providers(session),
+        "models": get_distinct_models(session),
+    }

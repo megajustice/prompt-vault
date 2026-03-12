@@ -1,0 +1,106 @@
+{% extends "base.html" %}
+{% block title %}Dashboard - Prompt Vault{% endblock %}
+{% block content %}
+<h1 class="page-title">Dashboard</h1>
+
+<div class="stat-cards">
+    <div class="stat-card">
+        <div class="stat-value">{{ total }}</div>
+        <div class="stat-label">Total Prompts</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-value">{{ providers|length }}</div>
+        <div class="stat-label">Providers</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-value">{{ models|length }}</div>
+        <div class="stat-label">Models Used</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-value">{{ "{:,}".format(tokens.total_tokens) }}</div>
+        <div class="stat-label">Total Tokens</div>
+    </div>
+</div>
+
+<div class="grid-2">
+    <div class="card">
+        <h3>Prompts by Provider</h3>
+        {% if providers %}
+        <div class="bar-chart">
+            {% set max_count = providers[0].count if providers else 1 %}
+            {% for p in providers %}
+            <div class="bar-row">
+                <span class="bar-label">{{ p.provider }}</span>
+                <div class="bar-track">
+                    <div class="bar-fill" style="width: {{ (p.count / max_count * 100)|int }}%"></div>
+                </div>
+                <span class="bar-value">{{ p.count }}</span>
+            </div>
+            {% endfor %}
+        </div>
+        {% else %}
+        <p class="empty-text">No data yet</p>
+        {% endif %}
+    </div>
+
+    <div class="card">
+        <h3>Avg Latency by Provider</h3>
+        {% if latency_by_provider %}
+        <div class="bar-chart">
+            {% set max_lat = latency_by_provider|map(attribute='avg_ms')|max %}
+            {% for lp in latency_by_provider %}
+            <div class="bar-row">
+                <span class="bar-label">{{ lp.provider }}</span>
+                <div class="bar-track">
+                    <div class="bar-fill bar-latency" style="width: {{ (lp.avg_ms / max_lat * 100)|int }}%"></div>
+                </div>
+                <span class="bar-value">{{ lp.avg_ms }}ms</span>
+            </div>
+            {% endfor %}
+        </div>
+        {% else %}
+        <p class="empty-text">No data yet</p>
+        {% endif %}
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-header">
+        <h3>Recent Prompts</h3>
+        <a href="/prompts" class="link-btn">View all</a>
+    </div>
+    {% if recent %}
+    <table>
+        <thead>
+            <tr>
+                <th>ID</th>
+                <th>Provider</th>
+                <th>Model</th>
+                <th>Prompt</th>
+                <th>Latency</th>
+                <th>Status</th>
+                <th>Created</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for log in recent %}
+            <tr class="clickable" onclick="window.location='/prompts/{{ log.id }}'">
+                <td>{{ log.id }}</td>
+                <td><span class="badge badge-{{ log.provider }}">{{ log.provider }}</span></td>
+                <td class="mono">{{ log.model }}</td>
+                <td class="truncate">{{ log.prompt[:60] }}{% if log.prompt|length > 60 %}...{% endif %}</td>
+                <td>{{ "%.0f"|format(log.latency_ms) }}ms</td>
+                <td><span class="status-dot status-{{ log.status }}"></span> {{ log.status }}</td>
+                <td>{{ log.created_at.strftime('%Y-%m-%d %H:%M') }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <div class="empty-state">
+        <p>No prompt logs yet.</p>
+        <p>Send a POST to <code>/api/ask</code> or <code>/v1/chat/completions</code> to start tracking.</p>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

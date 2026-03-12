@@ -86,27 +86,63 @@ class ChatCompletionResponse(BaseModel):
 @router.post("/v1/chat/completions", response_model=ChatCompletionResponse)
 def chat_completions(req: ChatCompletionRequest, session: Session = Depends(get_session)):
     if req.stream:
-        raise HTTPException(status_code=400, detail="Streaming is not supported")
+        from fastapi.responses import JSONResponse
+        return JSONResponse(
+            status_code=400,
+            content={
+                "error": {
+                    "message": "Streaming is not supported by Prompt Vault",
+                    "type": "invalid_request_error",
+                    "code": "streaming_not_supported",
+                }
+            },
+        )
+
+    if not req.messages:
+        from fastapi.responses import JSONResponse
+        return JSONResponse(
+            status_code=400,
+            content={
+                "error": {
+                    "message": "messages must contain at least one message",
+                    "type": "invalid_request_error",
+                    "code": "invalid_messages",
+                }
+            },
+        )
 
     provider, model = parse_model(req.model)
-    prompt = messages_to_prompt([m.dict() for m in req.messages])
+    prompt = messages_to_prompt([m.model_dump() for m in req.messages])
 
     try:
         result = call_provider(provider, model, prompt)
     except ProviderError as e:
-        raise HTTPException(status_code=e.status_code, detail=str(e))
+        from fastapi.responses import JSONResponse
+        return JSONResponse(
+            status_code=e.status_code,
+            content={
+                "error": {
+                    "message": str(e),
+                    "type": "invalid_request_error" if e.status_code < 500 else "server_error",
+                    "code": "model_error",
+                }
+            },
+        )
 
-    # Log using existing system
+    # Log with full token data
+    tokens = result.tokens
     log_data = PromptLogCreate(
         prompt=prompt,
         response=result.response,
         model=model,
         provider=provider,
         latency_ms=result.latency_ms,
+        status="success",
+        prompt_tokens=tokens.get("prompt"),
+        completion_tokens=tokens.get("completion"),
+        total_tokens=tokens.get("total"),
     )
     create_prompt_log(session, log_data)
-
-    tokens = result.tokens
 
     return ChatCompletionResponse(
         id=f"chatcmpl-{uuid.uuid4().hex[:24]}",

@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+{% block title %}Prompts - Prompt Vault{% endblock %}
+{% block content %}
+<h1 class="page-title">Prompts</h1>
+
+<div class="toolbar">
+    <div class="search-bar">
+        <input
+            type="search"
+            name="q"
+            placeholder="Search prompts, models, providers..."
+            value="{{ query|default('') }}"
+            hx-get="/prompts"
+            hx-trigger="input changed delay:300ms, search"
+            hx-target="#prompt-list"
+            hx-indicator="#spinner"
+        >
+        <span id="spinner" class="htmx-indicator">Searching...</span>
+    </div>
+    <div class="filters">
+        <select name="provider" hx-get="/prompts" hx-target="#prompt-list" hx-trigger="change" hx-include="[name='q']">
+            <option value="">All Providers</option>
+            {% for p in providers %}
+            <option value="{{ p }}" {% if provider_filter == p %}selected{% endif %}>{{ p }}</option>
+            {% endfor %}
+        </select>
+        <select name="model" hx-get="/prompts" hx-target="#prompt-list" hx-trigger="change" hx-include="[name='q']">
+            <option value="">All Models</option>
+            {% for m in models %}
+            <option value="{{ m }}" {% if model_filter == m %}selected{% endif %}>{{ m }}</option>
+            {% endfor %}
+        </select>
+        <select name="status" hx-get="/prompts" hx-target="#prompt-list" hx-trigger="change" hx-include="[name='q']">
+            <option value="">All Statuses</option>
+            <option value="success" {% if status_filter == 'success' %}selected{% endif %}>Success</option>
+            <option value="error" {% if status_filter == 'error' %}selected{% endif %}>Error</option>
+        </select>
+    </div>
+</div>
+
+<div id="prompt-list">
+    {% include "partials/prompt_list.html" %}
+</div>
+
+{% if logs|length >= 50 %}
+<div class="pagination">
+    {% if page > 1 %}
+    <a href="/prompts?page={{ page - 1 }}&provider={{ provider_filter }}&model={{ model_filter }}&status={{ status_filter }}&q={{ query }}" class="btn btn-sm">Previous</a>
+    {% endif %}
+    <span class="page-info">Page {{ page }}</span>
+    <a href="/prompts?page={{ page + 1 }}&provider={{ provider_filter }}&model={{ model_filter }}&status={{ status_filter }}&q={{ query }}" class="btn btn-sm">Next</a>
+</div>
+{% endif %}
+{% endblock %}
