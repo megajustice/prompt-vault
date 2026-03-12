@@ -22,6 +22,7 @@ from prompt_vault.services.prompt_service import (
     get_distinct_models,
 )
 from prompt_vault.providers.registry import list_providers
+from prompt_vault.providers.base import KNOWN_MODELS
 
 templates = Jinja2Templates(directory="prompt_vault/templates")
 
@@ -99,6 +100,7 @@ def detail(log_id: int, request: Request, session: Session = Depends(get_session
         "entry": entry,
         "replay_chain": replay_chain,
         "available_providers": list_providers(),
+        "known_models": KNOWN_MODELS,
     })
 
 
@@ -108,6 +110,7 @@ def compare_page(request: Request):
     return templates.TemplateResponse("compare.html", {
         "request": request,
         "providers": providers,
+        "known_models": KNOWN_MODELS,
     })
 
 

@@ -55,12 +55,16 @@
     <div id="replay-form" style="display:none;" class="replay-section">
         <h3>Replay this prompt</h3>
         <div class="replay-controls">
-            <select id="replay-provider">
+            <select id="replay-provider" onchange="updateReplayModels()">
                 {% for p in available_providers %}
                 <option value="{{ p }}" {% if p == entry.provider %}selected{% endif %}>{{ p }}</option>
                 {% endfor %}
             </select>
-            <input type="text" id="replay-model" value="{{ entry.model }}" placeholder="model name">
+            <select id="replay-model">
+                {% for m in known_models.get(entry.provider, []) %}
+                <option value="{{ m }}" {% if m == entry.model %}selected{% endif %}>{{ m }}</option>
+                {% endfor %}
+            </select>
             <button class="btn btn-primary" onclick="doReplay({{ entry.id }})">Send</button>
         </div>
         <div id="replay-result"></div>
@@ -115,6 +119,15 @@
 
 {% block scripts %}
 <script>
+const KNOWN_MODELS = {{ known_models | tojson }};
+
+function updateReplayModels() {
+    const provider = document.getElementById('replay-provider').value;
+    const modelSelect = document.getElementById('replay-model');
+    const models = KNOWN_MODELS[provider] || [];
+    modelSelect.innerHTML = models.map(m => `<option value="${m}">${m}</option>`).join('');
+}
+
 function copyToClipboard(id) {
     const text = document.getElementById(id).innerText;
     navigator.clipboard.writeText(text).then(() => {
