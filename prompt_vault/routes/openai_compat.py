@@ -1,3 +1,4 @@
+import logging
 import time
 import uuid
 from typing import List, Optional
@@ -9,18 +10,11 @@ from pydantic import BaseModel
 from prompt_vault.database import get_session
 from prompt_vault.models import PromptLogCreate
 from prompt_vault.services.prompt_service import create_prompt_log
-from prompt_vault.services.openai_provider import call_openai
-from prompt_vault.services.anthropic_provider import call_anthropic
+from prompt_vault.providers.registry import call_provider, ProviderError
+
+logger = logging.getLogger("prompt_vault.routes.openai_compat")
 
 router = APIRouter(tags=["openai-compat"])
-
-PROVIDERS = {
-    "openai": call_openai,
-    "anthropic": call_anthropic,
-}
-
-# Models that don't need a prefix are assumed OpenAI
-OPENAI_MODELS = {"gpt-4o", "gpt-4o-mini", "gpt-4", "gpt-4-turbo", "gpt-3.5-turbo"}
 
 
 def parse_model(model_str: str):
@@ -28,8 +22,6 @@ def parse_model(model_str: str):
     if "/" in model_str:
         provider, model = model_str.split("/", 1)
         return provider, model
-    if model_str in OPENAI_MODELS or model_str.startswith("gpt-"):
-        return "openai", model_str
     return "openai", model_str
 
 
@@ -97,34 +89,24 @@ def chat_completions(req: ChatCompletionRequest, session: Session = Depends(get_
         raise HTTPException(status_code=400, detail="Streaming is not supported")
 
     provider, model = parse_model(req.model)
-
-    if provider not in PROVIDERS:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Unknown provider '{provider}'. Use format: provider/model (e.g. anthropic/claude-sonnet-4-6)",
-        )
-
     prompt = messages_to_prompt([m.dict() for m in req.messages])
-    call_fn = PROVIDERS[provider]
 
     try:
-        result = call_fn(prompt=prompt, model=model)
-    except ValueError as e:
-        raise HTTPException(status_code=401, detail=str(e))
-    except RuntimeError as e:
-        raise HTTPException(status_code=502, detail=str(e))
+        result = call_provider(provider, model, prompt)
+    except ProviderError as e:
+        raise HTTPException(status_code=e.status_code, detail=str(e))
 
     # Log using existing system
     log_data = PromptLogCreate(
         prompt=prompt,
-        response=result["response"],
+        response=result.response,
         model=model,
         provider=provider,
-        latency_ms=result["latency_ms"],
+        latency_ms=result.latency_ms,
     )
     create_prompt_log(session, log_data)
 
-    tokens = result.get("tokens", {})
+    tokens = result.tokens
 
     return ChatCompletionResponse(
         id=f"chatcmpl-{uuid.uuid4().hex[:24]}",
@@ -132,7 +114,7 @@ def chat_completions(req: ChatCompletionRequest, session: Session = Depends(get_
         model=req.model,
         choices=[
             Choice(
-                message=ChatMessageResponse(content=result["response"]),
+                message=ChatMessageResponse(content=result.response),
             )
         ],
         usage=Usage(

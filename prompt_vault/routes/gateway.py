@@ -1,4 +1,5 @@
-from typing import List
+import logging
+from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlmodel import Session
@@ -7,16 +8,29 @@ from pydantic import BaseModel
 from prompt_vault.database import get_session
 from prompt_vault.models import PromptLogCreate
 from prompt_vault.services.prompt_service import create_prompt_log
-from prompt_vault.services.openai_provider import call_openai
-from prompt_vault.services.anthropic_provider import call_anthropic
+from prompt_vault.providers.registry import call_provider, ProviderError, list_providers
+
+logger = logging.getLogger("prompt_vault.routes.gateway")
 
 router = APIRouter(prefix="/api", tags=["gateway"])
 
-PROVIDERS = {
-    "openai": call_openai,
-    "anthropic": call_anthropic,
-}
 
+# --- Shared helper ---
+
+def _log_result(session, prompt, result, tags=None):
+    """Log a provider result to the database and JSONL file."""
+    log_data = PromptLogCreate(
+        prompt=prompt,
+        response=result.response,
+        model=result.model,
+        provider=result.provider,
+        latency_ms=result.latency_ms,
+        tags=tags,
+    )
+    return create_prompt_log(session, log_data)
+
+
+# --- POST /api/ask ---
 
 class AskRequest(BaseModel):
     provider: str
@@ -33,38 +47,22 @@ class AskResponse(BaseModel):
 
 @router.post("/ask", response_model=AskResponse)
 def ask(req: AskRequest, session: Session = Depends(get_session)):
-    if req.provider not in PROVIDERS:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Unknown provider '{req.provider}'. Supported: {list(PROVIDERS.keys())}",
-        )
-
-    call_fn = PROVIDERS[req.provider]
-
     try:
-        result = call_fn(prompt=req.prompt, model=req.model)
-    except ValueError as e:
-        raise HTTPException(status_code=401, detail=str(e))
-    except RuntimeError as e:
-        raise HTTPException(status_code=502, detail=str(e))
+        result = call_provider(req.provider, req.model, req.prompt)
+    except ProviderError as e:
+        raise HTTPException(status_code=e.status_code, detail=str(e))
 
-    # Log to database and JSON file using existing system
-    log_data = PromptLogCreate(
-        prompt=req.prompt,
-        response=result["response"],
-        model=result["model"],
-        provider=result["provider"],
-        latency_ms=result["latency_ms"],
-    )
-    create_prompt_log(session, log_data)
+    _log_result(session, req.prompt, result)
 
     return AskResponse(
-        response=result["response"],
-        provider=result["provider"],
-        model=result["model"],
-        latency_ms=result["latency_ms"],
+        response=result.response,
+        provider=result.provider,
+        model=result.model,
+        latency_ms=result.latency_ms,
     )
 
+
+# --- POST /api/compare ---
 
 class ModelTarget(BaseModel):
     provider: str
@@ -81,7 +79,7 @@ class CompareResult(BaseModel):
     provider: str
     model: str
     latency_ms: float
-    error: str = None
+    error: Optional[str] = None
 
 
 class CompareResponse(BaseModel):
@@ -96,20 +94,10 @@ def compare(req: CompareRequest, session: Session = Depends(get_session)):
 
     results = []
     for target in req.models:
-        if target.provider not in PROVIDERS:
-            results.append(CompareResult(
-                response="",
-                provider=target.provider,
-                model=target.model,
-                latency_ms=0,
-                error=f"Unknown provider '{target.provider}'",
-            ))
-            continue
-
-        call_fn = PROVIDERS[target.provider]
         try:
-            result = call_fn(prompt=req.prompt, model=target.model)
-        except (ValueError, RuntimeError) as e:
+            result = call_provider(target.provider, target.model, req.prompt)
+        except ProviderError as e:
+            logger.warning("Compare target %s/%s failed: %s", target.provider, target.model, e)
             results.append(CompareResult(
                 response="",
                 provider=target.provider,
@@ -119,21 +107,13 @@ def compare(req: CompareRequest, session: Session = Depends(get_session)):
             ))
             continue
 
-        log_data = PromptLogCreate(
-            prompt=req.prompt,
-            response=result["response"],
-            model=result["model"],
-            provider=result["provider"],
-            latency_ms=result["latency_ms"],
-            tags="compare",
-        )
-        create_prompt_log(session, log_data)
+        _log_result(session, req.prompt, result, tags="compare")
 
         results.append(CompareResult(
-            response=result["response"],
-            provider=result["provider"],
-            model=result["model"],
-            latency_ms=result["latency_ms"],
+            response=result.response,
+            provider=result.provider,
+            model=result.model,
+            latency_ms=result.latency_ms,
         ))
 
     return CompareResponse(prompt=req.prompt, results=results)

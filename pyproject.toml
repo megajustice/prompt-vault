@@ -4,12 +4,15 @@ version = "0.1.0"
 description = "Track prompts and responses across multiple LLM providers"
 readme = "README.md"
 license = {text = "MIT"}
-requires-python = ">=3.11"
+requires-python = ">=3.9"
 dependencies = [
     "fastapi>=0.115.0",
     "uvicorn[standard]>=0.32.0",
     "sqlmodel>=0.0.22",
     "jinja2>=3.1.4",
+    "python-dotenv>=1.0.0",
+    "openai>=1.0.0",
+    "anthropic>=0.8.0",
 ]
 
 [project.scripts]
